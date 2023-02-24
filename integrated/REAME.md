@@ -14,6 +14,25 @@ sudo mount -t nfs 10.67.108.173:/home/vsi/nfs_share ./nfs
 
 ```
 
+## source code prepare
+
+### 1. Modify CMakeLists.txt
+```
+src/plugins/intel_cpu/thirdparty/CMakeLists.txt
+Switching DNNL_BUILD_TESTS OFF to ON
+set(DNNL_BUILD_TESTS ON CACHE BOOL "" FORCE) 
+```
+
+### 2. If you want to use "USE_BRG" environments
+Add the following code fo file *src/plugins/intel_cpu/src/nodes/conv.cpp*
+```
+Add code at the end of Convolution::initTryBrgconvFlag() function
+auto p = getenv("USE_BRG");
+if (p) {
+    shouldTryBrgconv = p[0] == '1';
+} 
+```
+
 ## configuration profile -- config.ini
 ***Tips: If you do not use some non-bool parameters, please set them to empty, do not delete keywords. Such as binB="". If you 
 want to set bool parameters, please use `True` or `False`. Pay attention to capitalization.***
