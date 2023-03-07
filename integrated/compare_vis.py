@@ -5,20 +5,24 @@ import argparse
 import os.path
 import json
 
-my_verbose_converter = None
-if 'VERBOSE_CONVERT' in os.environ:
-    sys.path.append(os.environ['VERBOSE_CONVERT'])
-    try:
-        import verbose_converter
 
-        my_verbose_converter = verbose_converter.convert
-    except Exception as e:
-        print(e)
-        pass
+def set_verbose():
+    my_verbose_converter = None
+    if 'VERBOSE_CONVERT' in os.environ:
+        sys.path.append(os.environ['VERBOSE_CONVERT'])
+        try:
+            import verbose_converter
+
+            my_verbose_converter = verbose_converter.convert
+            return my_verbose_converter
+        except Exception as e:
+            print(e)
+            pass
 
 exec_graphA = ''
 exec_graphB = ''
 args = None
+
 
 def find_layout(exec_graph, name):
     if (name.endswith("...")):
@@ -178,6 +182,7 @@ def show_result(log_file, pc_by_node, pc_by_type, stat):
     for s in stat:
         print(s.rstrip("\n").rstrip("\r"))
 
+
 def smart_val(v):
     if abs(v) > 1000000:
         return "{:.1f}M".format(v/1000000)
@@ -196,9 +201,8 @@ def choose_color(t0, t1):
     return color_start, color_end
 
 
-
 def show_compare_result(log_fileA, log_fileB, reportA, reportB):
-
+    my_verbose_converter = set_verbose()
     pc_by_node0, pc_by_type0, stat0, verbose_by_name0, statis_by_type0 = analyse(log_fileA, reportA)
     if reportB:
         pc_by_node1, pc_by_type1, stat1, verbose_by_name1, statis_by_type1 = analyse(log_fileB, reportB)
@@ -306,7 +310,10 @@ def show_compare_result(log_fileA, log_fileB, reportA, reportB):
     print("")
     print("{:>8}  {:>32}   {:<32}   {}".format(smart_val(total_time1 - total_time0), total_time0, total_time1, "Totals"))
 
-    node_cnt_to_show = args.node_cnt if args else 0
+    node_cnt_to_show = 10000
+    node_type = ""
+    show_verbose = True
+
     if (node_cnt_to_show > 0):
         print("*********************************************************")
         print("*                   comparing by node                   *")
@@ -339,14 +346,14 @@ def show_compare_result(log_fileA, log_fileB, reportA, reportB):
                 time1 = 0
                 info1 = "---"
             
-            if args.node_type in info0 or args.node_type in info1:
+            if node_type in info0 or node_type in info1:
                 node_cnt_to_show -= 1
                 total_time0 += time0
                 total_time1 += time1
                 color_start, color_end = choose_color(time0, time1)
                 print("{} {:>6} {:>50}  {:<50}  {} {}".format(color_start, smart_val(time1-time0), info0, info1, name, color_end))
 
-                if args.show_verbose == True:
+                if show_verbose == True:
                     verbose = ''
                     if name in verbose_by_name0:
                         verbose = 'onednn_verbose,exec,' + verbose_by_name0[name]

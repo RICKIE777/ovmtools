@@ -4,143 +4,19 @@ import sys, os
 import argparse
 import os.path
 import json
-
-my_verbose_converter = None
-if 'VERBOSE_CONVERT' in os.environ:
-    sys.path.append(os.environ['VERBOSE_CONVERT'])
-    try:
-        import verbose_converter
-
-        my_verbose_converter = verbose_converter.convert
-    except Exception as e:
-        print(e)
-        pass
+import compare_vis
 
 exec_graph_A = ''
 exec_graph_B = ''
-args = None
-
-
-def find_layout(exec_graph, name):
-    if (name.endswith("...")):
-        tag = 'originalLayersNames="{}'.format(name.rstrip("..."))
-    else:
-        tag = 'originalLayersNames="{}'.format(name)
-    layout = 'outputLayouts="'
-    found = 0
-    ret = "?"
-    for l in exec_graph:
-        if tag in l:
-            sl = l[l.index(layout) + len(layout):]
-            found += 1
-            ret = sl[0:sl.index('"')]
-
-    if found > 1:
-        ret = "?"
-    return ret
-
-
 pc_log_start_tag = "[ INFO ] Performance counts for 0-th infer request:"
 pc_log_end_tag = "Total time:"
 
 
-def analyse(log_file, json_dir):
-    pc_by_type = {}
-    pc_by_node = {}
-    statis_by_type = {}
-
-    stat = []
-    verbose_by_name = {}
-    layers = None
-    if os.path.isfile(f'{json_dir}/benchmark_detailed_counters_report.json'):
-        with open(f'{json_dir}/benchmark_detailed_counters_report.json', "r") as f:
-            layers = json.loads(f.read())
-
-    def append_to_result(run, layer_type, realTime, cpuTime, execType, name):
-        if (run == "NOT_RUN"):
-            return
-        node_type = layer_type + "_" + execType
-
-        if node_type.startswith('Convolution_brgconv_avx512'):
-            node_type = node_type.replace('brgconv', 'brg.jit')
-        elif node_type.startswith('Convolution_jit_avx512'):
-            node_type = node_type.replace('jit', 'brg.jit')
-        elif node_type.startswith('Convolution_jit_gemm_FP32'):
-            node_type = 'Convolution_brg.jit_avx512_FP32'
-        if node_type.startswith('GroupConvolution_ref_any_FP32'):
-            node_type = 'GroupConvolution_any.brg.jit.gemm_FP32'
-        elif node_type.startswith('GroupConvolution_brgconv_avx512') and node_type.endswith('_FP32'):
-            node_type = 'GroupConvolution_any.brg.jit.gemm_FP32'
-        elif node_type.startswith('GroupConvolution_jit_avx512_FP32'):
-            node_type = 'GroupConvolution_any.brg.jit.gemm_FP32'
-        elif node_type.startswith('GroupConvolution_jit_gemm_FP32'):
-            node_type = 'GroupConvolution_any.brg.jit.gemm_FP32'
-
-        if not node_type in pc_by_type:
-            pc_by_type[node_type] = [0, 0]  # cnt, total
-        if layer_type not in statis_by_type:
-            statis_by_type[layer_type] = [0, 0]
-
-        pc_by_type[node_type][0] += 1
-        pc_by_type[node_type][1] += int(realTime)
-        statis_by_type[layer_type][0] += 1
-        statis_by_type[layer_type][1] += int(realTime)
-
-        pc_by_node[name] = [int(realTime), layer_type, execType]
-
-    with open(log_file, "r") as f:
-        start = False
-        for l in f.readlines():
-            if 'verbose##' in l:
-                items = l.split('##')
-                verbose_by_name[items[1]] = items[2].strip()
-                continue
-            if l.startswith("	Percent of CPU this job got") or \
-                    l.startswith("	Maximum resident set size (kbytes)") or \
-                    l.startswith("	User time (seconds)"):
-                stat.append(l.strip("\t"))
-                continue
-            if l.startswith("[ INFO ] 	Average:") or \
-                    l.startswith("[ INFO ] Throughput:") or \
-                    l.startswith("[ INFO ]    Average:"):
-                stat.append(l[9:].strip(" ").strip("\t"))
-                continue
-
-            if l == '\n' or layers: continue
-            if l.startswith(pc_log_start_tag):
-                start = True
-                continue
-            if start:
-                if l.startswith(pc_log_end_tag):
-                    start = False
-            if start:
-                name = l[:30].rstrip(" ")
-                run, _, layer_type, _, realTime, _, cpuTime, _, execType = l[30:].split()
-                append_to_result(run, layer_type, realTime, cpuTime, execType, name)
-
-    if layers:
-        for layer in layers['detailed_performance'][0]['nodes']:
-            append_to_result(layer['status'], layer['node_type'], \
-                             layer['real_time'] * 1000, layer['cpu_time'] * 1000, layer['exec_type'], layer['name'])
-
-    pc_by_node = sorted(pc_by_node.items(), key=lambda d: d[1][0], reverse=True)
-    pc_by_type = sorted(pc_by_type.items(), key=lambda d: d[1][1], reverse=True)
-    statis_by_type = sorted(statis_by_type.items(), key=lambda d: d[1][1], reverse=True)
-    return pc_by_node, pc_by_type, stat, verbose_by_name, statis_by_type
-
-
-def smart_val(v):
-    if abs(v) > 1000000:
-        return "{:.1f}M".format(v/1000000)
-    if abs(v) > 1000:
-        return "{:.1f}K".format(v/1000)
-    return v
-
-
 def show_compare_result(log_file_A, log_file_B, all_dict, prefixA, prefixB, reportA, reportB):
-    pc_by_node0, pc_by_type0, stat0, verbose_by_name0, statis_by_type0 = analyse(log_file_A, reportA)
+    my_verbose_converter = compare_vis.set_verbose()
+    pc_by_node0, pc_by_type0, stat0, verbose_by_name0, statis_by_type0 = compare_vis.analyse(log_file_A, reportA)
     if prefixB:
-        pc_by_node1, pc_by_type1, stat1, verbose_by_name1, statis_by_type1 = analyse(log_file_B, reportB)
+        pc_by_node1, pc_by_type1, stat1, verbose_by_name1, statis_by_type1 = compare_vis.analyse(log_file_B, reportB)
     else:
         pc_by_node1 = []
         pc_by_type1 = []
@@ -173,12 +49,12 @@ def show_compare_result(log_file_A, log_file_B, all_dict, prefixA, prefixB, repo
         if node_type in info0 or node_type in info1:
             total_time0 += time0
             total_time1 += time1
-            time_diff = smart_val(time1 - time0)
+            time_diff = compare_vis.smart_val(time1 - time0)
             print("{:>6} {:>50}  {:<50}  {}".format(time_diff, info0, info1, name))
 
             if show_verbose:
-                verbose0, benchdnn0 = get_print_info(name, verbose_by_name0)
-                verbose1, benchdnn1 = get_print_info(name, verbose_by_name1)
+                verbose0, benchdnn0 = get_print_info(my_verbose_converter, name, verbose_by_name0)
+                verbose1, benchdnn1 = get_print_info(my_verbose_converter, name, verbose_by_name1)
                 A_info += [verbose0, benchdnn0]
                 B_info += [verbose1, benchdnn1]
         layerid += 1
@@ -188,7 +64,7 @@ def show_compare_result(log_file_A, log_file_B, all_dict, prefixA, prefixB, repo
 
 
     print("")
-    print("{:>6} {:>50}   {:<50}   {}".format(smart_val(total_time1 - total_time0), total_time0,total_time1, "Totals"))
+    print("{:>6} {:>50}   {:<50}   {}".format(compare_vis.smart_val(total_time1 - total_time0), total_time0,total_time1, "Totals"))
 
     print("")
     for i in range(len(stat0)):
@@ -209,7 +85,7 @@ def get_exec_info(pc_by_node, name):
     v0 = find(pc_by_node, name)
     if v0:
         time0, layer0, exectype = v0
-        layout = find_layout(exec_graph_A, name)
+        layout = compare_vis.find_layout(exec_graph_A, name)
         info0 = "{}_{}_{} {:6.1f}".format(layer0, exectype, layout, time0)
     else:
         time0 = 0
@@ -220,7 +96,7 @@ def get_exec_info(pc_by_node, name):
     return info0, time0, layer0, exectype, layout
 
 
-def get_print_info(name, verbose_by_name0):
+def get_print_info(my_verbose_converter, name, verbose_by_name0):
     verbose = ""
     benchdnn = ""
     if name in verbose_by_name0:
