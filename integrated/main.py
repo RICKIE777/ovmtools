@@ -33,11 +33,25 @@ class Process:
         self.single = eval(self.config['Mode']['single']) if self.config['Mode']['single'] else False
 
     def get_models(self):
-        self.fp32_model = Path(self.fp32_model).rglob('*.xml') if os.path.isdir(self.fp32_model) else self.fp32_model
-        self.int8_model = Path(self.int8_model).rglob('*.xml') if os.path.isdir(self.int8_model) else self.int8_model
+        if self.fp32_model:
+            if ".txt" in os.path.splitext(self.fp32_model):
+                self.fp32_model = self.read_model_lst(self.fp32_model)
+            else:
+                self.fp32_model = Path(self.fp32_model).rglob('*.xml') if os.path.isdir(self.fp32_model) else [self.fp32_model]
+        if self.int8_model:
+            if ".txt" in os.path.splitext(self.int8_model):
+                self.int8_model = self.read_model_lst(self.int8_model)
+            else:
+                self.int8_model = Path(self.int8_model).rglob('*.xml') if os.path.isdir(self.int8_model) else [self.int8_model]
 
-    def del_old_data_file(self, save_path):
-        if (os.path.exists(save_path)):
+    @staticmethod
+    def read_model_lst(model_lst):
+        with open(model_lst, "r") as fp:
+            return [line.strip("\n") for line in fp]
+
+    @staticmethod
+    def del_old_data_file(save_path):
+        if os.path.exists(save_path):
             shutil.rmtree(save_path)
 
     def openfile(self, save_path, binA_prefix, binB_prefix):
@@ -109,7 +123,7 @@ class Process:
             benchmark_log_B_lst = []
             fps_resultB = []
             if self.single:
-                benchmark_log_A_lst, fps_resultA = self.run_benmark_app(binA, model=model_path,
+                benchmark_log_A_lst, fps_resultA = self.run_benchmark_app(binA, model=model_path,
                                                                         common_args=common_args,
                                                                         log_file=self.logA_detail_file,
                                                                         out_file=self.outA_file,
@@ -117,39 +131,39 @@ class Process:
                                                                         exec_graph=f'{save_path}/exec_graph_A.xml')
                 binB = binA
             elif self.compare_bin and self.compare_env:
-                benchmark_log_A_lst, fps_resultA = self.run_benmark_app(binA, envA, model=model_path,
+                benchmark_log_A_lst, fps_resultA = self.run_benchmark_app(binA, envA, model=model_path,
                                                                         common_args=common_args,
                                                                         log_file=self.logA_detail_file,
                                                                         out_file=self.outA_file,
                                                                         report_folder=f'{save_path}/a',
                                                                         exec_graph=f'{save_path}/exec_graph_A.xml')
-                benchmark_log_B_lst, fps_resultB = self.run_benmark_app(binB, envB, model=model_path,
+                benchmark_log_B_lst, fps_resultB = self.run_benchmark_app(binB, envB, model=model_path,
                                                                         common_args=common_args,
                                                                         log_file=self.logB_detail_file,
                                                                         out_file=self.outB_file,
                                                                         report_folder=f'{save_path}/b',
                                                                         exec_graph=f'{save_path}/exec_graph_B.xml')
             elif self.compare_bin and not self.compare_env:
-                benchmark_log_A_lst, fps_resultA = self.run_benmark_app(binA, model=model_path,
+                benchmark_log_A_lst, fps_resultA = self.run_benchmark_app(binA, model=model_path,
                                                                         common_args=common_args,
                                                                         log_file=self.logA_detail_file,
                                                                         out_file=self.outA_file,
                                                                         report_folder=f'{save_path}/a',
                                                                         exec_graph=f'{save_path}/exec_graph_A.xml')
-                benchmark_log_B_lst, fps_resultB = self.run_benmark_app(binB, model=model_path,
+                benchmark_log_B_lst, fps_resultB = self.run_benchmark_app(binB, model=model_path,
                                                                         common_args=common_args,
                                                                         log_file=self.logB_detail_file,
                                                                         out_file=self.outB_file,
                                                                         report_folder=f'{save_path}/b',
                                                                         exec_graph=f'{save_path}/exec_graph_B.xml')
             elif not self.compare_bin and self.compare_env:
-                benchmark_log_A_lst, fps_resultA = self.run_benmark_app(binA, envA, model=model_path,
+                benchmark_log_A_lst, fps_resultA = self.run_benchmark_app(binA, envA, model=model_path,
                                                                         common_args=common_args,
                                                                         log_file=self.logA_detail_file,
                                                                         out_file=self.outA_file,
                                                                         report_folder=f'{save_path}/a',
                                                                         exec_graph=f'{save_path}/exec_graph_A.xml')
-                benchmark_log_B_lst, fps_resultB = self.run_benmark_app(binA, envB, model=model_path,
+                benchmark_log_B_lst, fps_resultB = self.run_benchmark_app(binA, envB, model=model_path,
                                                                         common_args=common_args,
                                                                         log_file=self.logB_detail_file,
                                                                         out_file=self.outB_file,
@@ -177,11 +191,12 @@ class Process:
             self.get_analyze_data(save_path, binA_prefix, binA)
         self.closefile()
 
-    def run_benmark_app(self, bin, env="", model="", common_args="", log_file="", out_file="",
+    def run_benchmark_app(self, bin, env="", model="", common_args="", log_file="", out_file="",
                         report_folder="", exec_graph=""):
         # os.chdir(bin)
         print("bin: ", bin)
         env_lst = []
+        os.environ["ONEDNN_VERBOSE"] = "1"
         if self.benchdnn:
             os.environ["OV_CPU_DEBUG_LOG"] = 'CreatePrimitives;conv.cpp;deconv.cpp'
             os.environ["VERBOSE_CONVERT"] = bin + "/../../../src/plugins/intel_cpu/thirdparty/onednn/scripts/verbose_converter"
