@@ -167,26 +167,18 @@ class JsonData:
 
 
 def main(exec_graph_A, exec_graph_B, model, log_file_A, log_file_B, prefixA, prefixB, reportA, reportB, output_file):
-    my_verbose_converter = None
-    if 'VERBOSE_CONVERT' in os.environ:
-        sys.path.append(os.environ['VERBOSE_CONVERT'])
-        try:
-            import verbose_converter
+    try:
+        with open(exec_graph_A or './a/exec_graph_A.xml') as f:
+            print("prefixA: ", exec_graph_A)
+            exec_graph_A = f.readlines()
+    except FileNotFoundError:
+        exec_graph_A = ""
 
-            my_verbose_converter = verbose_converter.convert
-        except Exception as e:
-            print(e)
-            pass
-
-    with open(exec_graph_A or './a/exec_graph_A.xml') as f:
-        print("prefixA: ", exec_graph_A)
-        exec_graph_A = f.readlines()
-
-    if prefixB:
+    try:
         with open(exec_graph_B or './b/exec_graph_B.xml') as f:
             print("prefixB: ", exec_graph_B)
             exec_graph_B = f.readlines()
-    else:
+    except FileNotFoundError:
         exec_graph_B = ""
 
     all_dict = {"model_name": model}
