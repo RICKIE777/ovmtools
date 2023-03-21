@@ -112,13 +112,12 @@ def analyse(log_file, json_dir):
             pc_by_type[node_type] = [0,0] # cnt, total
         if layer_type not in statis_by_type:
             statis_by_type[layer_type] = [0, 0]
-
         pc_by_type[node_type][0] += 1
-        pc_by_type[node_type][1] += int(realTime)
+        pc_by_type[node_type][1] += round(float(realTime))
         statis_by_type[layer_type][0] += 1
-        statis_by_type[layer_type][1] += int(realTime)
+        statis_by_type[layer_type][1] += round(float(realTime))
 
-        pc_by_node[name] = [int(realTime), layer_type, execType]
+        pc_by_node[name] = [round(float(realTime)), layer_type, execType]
     with open(log_file,"r") as f:
         start  = False
         for l in f.readlines():
@@ -145,8 +144,12 @@ def analyse(log_file, json_dir):
                 if l.startswith(pc_log_end_tag):
                     start = False
             if start:
-                name = l[:30].rstrip(" ")
-                run, _, layer_type, _, realTime, _, cpuTime, _, execType = l[30:].split()
+                if "(ms)" in l:
+                    name = l[:21].rstrip(" ")
+                    run, _, layer_type, _, execType, _, _, realTime, _, _, cpuTime = l[21:].split()
+                else:
+                    name = l[:30].rstrip(" ")
+                    run, _, layer_type, _, realTime, _, cpuTime, _, execType = l[30:].split()
                 append_to_result(run, layer_type, realTime, cpuTime, execType, name)
 
     if layers:
